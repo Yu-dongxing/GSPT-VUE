@@ -30,6 +30,12 @@ const routes = [
     component: () => import("../views/FileManageView.vue"),
     meta: { title: "文件管理" },
   },
+  {
+    path: "/profile",
+    name: "profile",
+    component: () => import("../views/ProfileView.vue"),
+    meta: { title: "个人中心" },
+  },
 ];
 
 const router = createRouter({

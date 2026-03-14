@@ -11,11 +11,11 @@
           <div class="brand-subtitle">Global Site Portal</div>
         </div>
       </div>
-      
+
       <nav class="nav-list">
-        <RouterLink 
+        <RouterLink
           v-for="item in navItems"
-          :key="item.to" 
+          :key="item.to"
           :to="item.to"
           class="nav-item"
           :class="{ active: route.path === item.to }"
@@ -42,33 +42,32 @@
           <el-button class="menu-button" text @click="mobileMenuOpen = !mobileMenuOpen">
             <el-icon :size="20"><Operation /></el-icon>
           </el-button>
-          <div>
-            <div class="page-title">{{ route.meta.title || "管理后台" }}</div>
-          </div>
+          <div class="page-title">{{ route.meta.title || "管理后台" }}</div>
         </div>
-        
+
         <div class="topbar-right">
           <el-button circle @click="toggleTheme">
             <el-icon><component :is="isDark ? Sunny : Moon" /></el-icon>
           </el-button>
 
-            <el-dropdown>
+          <el-dropdown>
             <div class="account-entry">
               <el-avatar :size="32">{{ userInitial }}</el-avatar>
               <div class="account-text">
                 <div>{{ currentUser?.username || "管理员" }}</div>
-                <!-- <small>{{ auditStatusMap[currentUser?.auditStatus] || "在线" }}</small> -->
+                <small>{{ roleMap[currentUser?.role] || "管理员" }}</small>
               </div>
               <el-icon><ArrowDown /></el-icon>
             </div>
-              <template #dropdown>
-                <el-dropdown-menu>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="router.push('/profile')">个人中心</el-dropdown-item>
                 <el-dropdown-item @click="refreshCurrentUser">刷新用户信息</el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </header>
 
       <main class="page-body">
@@ -100,13 +99,6 @@ const roleMap = {
   1: "普通用户",
   2: "企业用户",
   3: "管理员",
-};
-
-const auditStatusMap = {
-  0: "无需审核",
-  1: "待审核",
-  2: "审核通过",
-  3: "审核驳回",
 };
 
 const navItems = [
@@ -147,7 +139,7 @@ async function handleLogout() {
   try {
     await logout();
   } catch {
-    // 由请求层统一处理
+    // 请求层统一处理
   } finally {
     localStorage.removeItem(TOKEN_KEY);
     currentUser.value = null;
@@ -161,7 +153,7 @@ watch(
     mobileMenuOpen.value = false;
     if (!isLoginPage.value) {
       refreshCurrentUser();
-  }
+    }
   },
   { immediate: true }
 );
@@ -299,8 +291,8 @@ onMounted(() => {
   font-weight: 700;
 }
 
-.page-subtitle,
-.account-text small {
+.account-text small,
+.account-meta {
   color: var(--text-muted);
 }
 
