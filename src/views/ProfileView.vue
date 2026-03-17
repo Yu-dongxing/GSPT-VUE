@@ -156,7 +156,7 @@ async function handleLicenseUpload(event) {
   try {
     const res = await uploadFile(file);
     profileForm.licenseFileId = res.data?.id || null;
-    profileForm.licenseUrl = res.data?.accessUrl || res.data?.fileUrl || "";
+    profileForm.licenseUrl = res.data?.fileUrl || "";
   } finally {
     licenseUploading.value = false;
   }

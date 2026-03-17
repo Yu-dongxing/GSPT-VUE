@@ -2,19 +2,19 @@ import { http, request } from "../utils/request";
 
 // User frontend APIs
 export function registerNormalUser(data) {
-  return http.post("/user/register/normal", data);
+  return http.post("/user/register/normal", data, { noAuth: true });
 }
 
 export function registerEnterpriseUser(data) {
-  return http.post("/user/register/enterprise", data);
+  return http.post("/user/register/enterprise", data, { noAuth: true });
 }
 
 export function loginUser(data) {
-  return http.post("/user/login", data);
+  return http.post("/user/login", data, { noAuth: true });
 }
 
 export function loginAdmin(data) {
-  return http.post("/admin/user/login", data);
+  return http.post("/admin/user/login", data, { noAuth: true });
 }
 
 export function logout() {
@@ -62,7 +62,7 @@ export function batchDeleteAdminUsers(userIds) {
   return request({
     url: "/admin/user/delete/batch",
     method: "get",
-    data: {
+    params: {
       userIds,
     },
   });

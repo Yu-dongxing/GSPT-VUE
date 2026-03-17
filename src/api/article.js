@@ -25,7 +25,7 @@ export function batchDeleteMyArticles(articleIds) {
   return request({
     url: "/article/my/delete/batch",
     method: "get",
-    data: {
+    params: {
       articleIds,
     },
   });

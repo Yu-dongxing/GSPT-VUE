@@ -4,13 +4,19 @@ import router from "../router";
 
 const DEFAULT_TIMEOUT = 15000;
 const SUCCESS_CODE = 200;
-export const TOKEN_KEY = "Authorization";
-const THEME_KEY = "gspt-theme";
 const DEFAULT_SUCCESS_MESSAGE = "操作成功";
 const DEFAULT_ERROR_MESSAGE = "请求失败";
+const LOGIN_EXPIRED_MESSAGE = "登录状态已失效，请重新登录";
+
+export const TOKEN_KEY = "Authorization";
+export const TOKEN_NAME_STORAGE_KEY = "__gspt_token_name__";
+export const CURRENT_USER_STORAGE_KEY = "__gspt_current_user__";
+
+const THEME_KEY = "gspt-theme";
+const RESULT_CODE_ENUM_NAME = "ResultCode";
 
 const baseURL =
-  import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8080/api";
+  import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8084/api";
 
 const service = axios.create({
   baseURL,
@@ -20,171 +26,99 @@ const service = axios.create({
 let resultCodePromise = null;
 let redirecting = false;
 
-function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+function getLocalStorageItem(key) {
+  return window.localStorage.getItem(key);
 }
 
-function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
+function setLocalStorageItem(key, value) {
+  window.localStorage.setItem(key, value);
 }
 
-function notify(message, type) {
-  ElMessage({
-    message,
-    type,
-    plain: true,
-    showClose: true,
-    duration: type === "success" ? 1800 : 2600,
+function removeLocalStorageItem(key) {
+  window.localStorage.removeItem(key);
+}
+
+export function getAuthToken() {
+  return getLocalStorageItem(TOKEN_KEY) || "";
+}
+
+export function getAuthHeaderName() {
+  return getLocalStorageItem(TOKEN_NAME_STORAGE_KEY) || TOKEN_KEY;
+}
+
+export function hasAuthSession() {
+  return Boolean(getAuthToken());
+}
+
+function clearDefaultAuthHeaders() {
+  const commonHeaders = service.defaults.headers.common || {};
+  Object.keys(commonHeaders).forEach((key) => {
+    if (/authorization/i.test(key)) {
+      delete commonHeaders[key];
+    }
   });
 }
 
-function collectEnumItems(input) {
-  if (!input) {
-    return [];
-  }
+function syncDefaultAuthHeaders() {
+  clearDefaultAuthHeaders();
 
-  if (Array.isArray(input)) {
-    return input;
-  }
-
-  if (typeof input === "object") {
-    return Object.values(input).flatMap((item) => collectEnumItems(item));
-  }
-
-  return [];
-}
-
-async function loadResultCodeMap() {
-  if (!resultCodePromise) {
-    resultCodePromise = service
-      .get("/common/enums/ResultCode", {
-        headers: {
-          "X-Skip-Message": "1",
-          "X-Skip-Result-Code": "1",
-        },
-      })
-      .then((response) => {
-        const res = response.data ?? {};
-        const items = collectEnumItems(res.data);
-        const map = new Map();
-        items.forEach((item) => {
-          const code = item?.code ?? item?.value ?? item?.key;
-          const label =
-            item?.message ?? item?.label ?? item?.name ?? item?.desc ?? item?.description;
-          if (code !== undefined && label) {
-            map.set(String(code), label);
-          }
-        });
-        return map;
-      })
-      .catch(() => new Map());
-  }
-
-  return resultCodePromise;
-}
-
-async function resolveMessage(res, skipResultCode) {
-  if (typeof res?.message === "string" && res.message.trim()) {
-    return res.message.trim();
-  }
-
-  if (!skipResultCode) {
-    const codeMap = await loadResultCodeMap();
-    const codeText = codeMap.get(String(res?.code));
-    if (codeText) {
-      return codeText;
-    }
-  }
-
-  return res?.code === SUCCESS_CODE ? DEFAULT_SUCCESS_MESSAGE : DEFAULT_ERROR_MESSAGE;
-}
-
-function isAuthInvalid(resOrMessage) {
-  const code = Number(resOrMessage?.code);
-  const message =
-    typeof resOrMessage === "string"
-      ? resOrMessage
-      : String(resOrMessage?.message || "");
-
-  return (
-    [400, 401, 403].includes(code) ||
-    /token|登录|认证|失效|未登录|鉴权/i.test(message)
-  );
-}
-
-function redirectToLogin(message = "登录状态已失效，请重新登录") {
-  clearToken();
-
-  if (redirecting || router.currentRoute.value.path === "/login") {
+  const token = getAuthToken();
+  if (!token) {
     return;
   }
 
-  redirecting = true;
-  ElMessage.warning(message);
-  router.replace("/login").finally(() => {
-    redirecting = false;
-  });
+  service.defaults.headers.common[getAuthHeaderName()] = token;
 }
 
-service.interceptors.request.use(
-  (config) => {
-    const token = getToken();
-    if (token) {
-      config.headers[TOKEN_KEY] = token;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-service.interceptors.response.use(
-  async (response) => {
-    const res = response.data ?? {};
-    const skipMessage = response.config?.headers?.["X-Skip-Message"] === "1";
-    const skipResultCode =
-      response.config?.headers?.["X-Skip-Result-Code"] === "1" ||
-      String(response.config?.url || "").includes("/common/enums/ResultCode");
-    const message = await resolveMessage(res, skipResultCode);
-
-    if (isAuthInvalid(res)) {
-      redirectToLogin(message);
-      const error = new Error(message);
-      error.response = res;
-      return Promise.reject(error);
-    }
-
-    if (!skipMessage) {
-      notify(message, res.code === SUCCESS_CODE ? "success" : "error");
-    }
-
-    if (res.code === SUCCESS_CODE) {
-      return res;
-    }
-
-    const error = new Error(message);
-    error.response = res;
-    return Promise.reject(error);
-  },
-  (error) => {
-    if (error?.code === "ECONNABORTED") {
-      ElMessage.error("请求超时");
-      return Promise.reject(error);
-    }
-
-    const status = error?.response?.status;
-    if ([401, 403].includes(status)) {
-      redirectToLogin();
-      return Promise.reject(error);
-    }
-
-    const serverMessage =
-      error?.response?.data?.message || error?.message || DEFAULT_ERROR_MESSAGE;
-    if (!isAuthInvalid(serverMessage)) {
-      ElMessage.error(serverMessage);
-    }
-    return Promise.reject(error);
+export function setAuthSession(tokenName, tokenValue) {
+  if (tokenName) {
+    setLocalStorageItem(TOKEN_NAME_STORAGE_KEY, tokenName);
   }
-);
+
+  if (tokenValue) {
+    setLocalStorageItem(TOKEN_KEY, tokenValue);
+  }
+
+  syncDefaultAuthHeaders();
+}
+
+export function clearAuthSession() {
+  removeLocalStorageItem(TOKEN_KEY);
+  removeLocalStorageItem(TOKEN_NAME_STORAGE_KEY);
+  removeLocalStorageItem(CURRENT_USER_STORAGE_KEY);
+  syncDefaultAuthHeaders();
+}
+
+export function setStoredCurrentUser(user) {
+  if (!user) {
+    removeLocalStorageItem(CURRENT_USER_STORAGE_KEY);
+    return;
+  }
+
+  setLocalStorageItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(user));
+}
+
+export function getStoredCurrentUser() {
+  const raw = getLocalStorageItem(CURRENT_USER_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    removeLocalStorageItem(CURRENT_USER_STORAGE_KEY);
+    return null;
+  }
+}
+
+export function getStoredTheme() {
+  return getLocalStorageItem(THEME_KEY) || "light";
+}
+
+export function setStoredTheme(theme) {
+  setLocalStorageItem(THEME_KEY, theme);
+}
 
 export function getApiBaseUrl() {
   return baseURL;
@@ -206,31 +140,244 @@ export function resolveAssetUrl(url) {
   return `${getAssetBaseUrl()}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
-export function getStoredTheme() {
-  return localStorage.getItem(THEME_KEY) || "light";
+function notify(message, type) {
+  ElMessage({
+    message,
+    type,
+    plain: true,
+    showClose: true,
+    duration: type === "success" ? 1800 : 2600,
+  });
 }
 
-export function setStoredTheme(theme) {
-  localStorage.setItem(THEME_KEY, theme);
+function isPlainObject(value) {
+  return Object.prototype.toString.call(value) === "[object Object]";
 }
 
-export function request(config) {
-  return service(config);
+function normalizeHeaders(headers) {
+  if (!headers) {
+    return {};
+  }
+
+  if (typeof headers.toJSON === "function") {
+    return headers.toJSON();
+  }
+
+  if (isPlainObject(headers)) {
+    return { ...headers };
+  }
+
+  return { ...headers };
+}
+
+function shouldAttachToken(config = {}) {
+  return config.noAuth !== true;
+}
+
+function attachAuthHeaders(config = {}) {
+  const nextConfig = { ...config };
+  const headers = normalizeHeaders(config.headers);
+
+  if (shouldAttachToken(config)) {
+    const token = getAuthToken();
+    if (token) {
+      headers[getAuthHeaderName()] = token;
+    }
+  }
+
+  nextConfig.headers = headers;
+  return nextConfig;
+}
+
+function collectEnumItems(input) {
+  if (!input) {
+    return [];
+  }
+
+  if (Array.isArray(input)) {
+    return input;
+  }
+
+  if (typeof input === "object") {
+    return Object.values(input).flatMap((item) => collectEnumItems(item));
+  }
+
+  return [];
+}
+
+async function loadResultCodeMap() {
+  if (!resultCodePromise) {
+    resultCodePromise = service
+      .request(
+        attachAuthHeaders({
+          url: `/common/enums/${RESULT_CODE_ENUM_NAME}`,
+          method: "get",
+          noAuth: true,
+          headers: {
+            "X-Skip-Message": "1",
+            "X-Skip-Result-Code": "1",
+          },
+        })
+      )
+      .then((response) => {
+        const res = response.data ?? {};
+        const map = new Map();
+        collectEnumItems(res.data).forEach((item) => {
+          const code = item?.code ?? item?.value ?? item?.key;
+          const label =
+            item?.message ?? item?.label ?? item?.name ?? item?.desc ?? item?.description;
+          if (code !== undefined && label) {
+            map.set(String(code), String(label));
+          }
+        });
+        return map;
+      })
+      .catch(() => new Map());
+  }
+
+  return resultCodePromise;
+}
+
+async function resolveResponseMessage(res, skipResultCode) {
+  const rawMessage = typeof res?.message === "string" ? res.message.trim() : "";
+  if (rawMessage) {
+    return rawMessage;
+  }
+
+  if (!skipResultCode) {
+    const codeMap = await loadResultCodeMap();
+    const enumMessage = codeMap.get(String(res?.code));
+    if (enumMessage) {
+      return enumMessage;
+    }
+  }
+
+  return Number(res?.code) === SUCCESS_CODE
+    ? DEFAULT_SUCCESS_MESSAGE
+    : DEFAULT_ERROR_MESSAGE;
+}
+
+function isAuthInvalidByCode(code) {
+  return [401, 1001, 1002, 1003, 1004, 1005, 1006, 1007].includes(Number(code));
+}
+
+function isAuthInvalidByMessage(message) {
+  return /(token|未登录|登录失效|登录状态|会话未登录|会话失效|重新登录)/i.test(
+    String(message || "")
+  );
+}
+
+function isAuthInvalid(resOrMessage) {
+  if (typeof resOrMessage === "string") {
+    return isAuthInvalidByMessage(resOrMessage);
+  }
+
+  return (
+    isAuthInvalidByCode(resOrMessage?.code) ||
+    isAuthInvalidByMessage(resOrMessage?.message)
+  );
+}
+
+function redirectToLogin(message = LOGIN_EXPIRED_MESSAGE) {
+  clearAuthSession();
+
+  if (redirecting || router.currentRoute.value.path === "/login") {
+    return;
+  }
+
+  redirecting = true;
+  ElMessage.warning(message);
+  router.replace("/login").finally(() => {
+    redirecting = false;
+  });
+}
+
+service.interceptors.request.use(
+  (config) => attachAuthHeaders(config),
+  (error) => Promise.reject(error)
+);
+
+service.interceptors.response.use(
+  async (response) => {
+    const res = response.data ?? {};
+    const headers = normalizeHeaders(response.config?.headers);
+    const skipMessage = String(headers["X-Skip-Message"] || "") === "1";
+    const skipResultCode =
+      String(headers["X-Skip-Result-Code"] || "") === "1" ||
+      String(response.config?.url || "").includes(`/common/enums/${RESULT_CODE_ENUM_NAME}`);
+    const message = await resolveResponseMessage(res, skipResultCode);
+
+    if (isAuthInvalid(res)) {
+      redirectToLogin(message);
+      const error = new Error(message);
+      error.response = res;
+      throw error;
+    }
+
+    if (!skipMessage) {
+      notify(message, Number(res?.code) === SUCCESS_CODE ? "success" : "error");
+    }
+
+    if (Number(res?.code) === SUCCESS_CODE) {
+      return res;
+    }
+
+    const error = new Error(message);
+    error.response = res;
+    throw error;
+  },
+  (error) => {
+    if (error?.code === "ECONNABORTED") {
+      ElMessage.error("请求超时");
+      return Promise.reject(error);
+    }
+
+    const responseStatus = Number(error?.response?.status);
+    const responseData = error?.response?.data;
+    const message =
+      responseData?.message || error?.message || DEFAULT_ERROR_MESSAGE;
+
+    if (isAuthInvalidByCode(responseStatus) || isAuthInvalid(responseData) || isAuthInvalid(message)) {
+      redirectToLogin(typeof message === "string" && message.trim() ? message : LOGIN_EXPIRED_MESSAGE);
+      return Promise.reject(error);
+    }
+
+    ElMessage.error(message);
+    return Promise.reject(error);
+  }
+);
+
+export function request(config = {}) {
+  return service.request(attachAuthHeaders(config));
+}
+
+function buildConfig(method, url, payload, config = {}) {
+  const nextConfig = { ...config, url, method };
+
+  if (method === "get" || method === "delete") {
+    nextConfig.params = payload;
+  } else {
+    nextConfig.data = payload;
+  }
+
+  return nextConfig;
 }
 
 export const http = {
   get(url, params, config) {
-    return service({ url, method: "get", params, ...config });
+    return request(buildConfig("get", url, params, config));
   },
   post(url, data, config) {
-    return service({ url, method: "post", data, ...config });
+    return request(buildConfig("post", url, data, config));
   },
   put(url, data, config) {
-    return service({ url, method: "put", data, ...config });
+    return request(buildConfig("put", url, data, config));
   },
   delete(url, params, config) {
-    return service({ url, method: "delete", params, ...config });
+    return request(buildConfig("delete", url, params, config));
   },
 };
+
+syncDefaultAuthHeaders();
 
 export default request;

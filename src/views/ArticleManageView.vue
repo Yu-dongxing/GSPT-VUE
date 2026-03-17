@@ -118,10 +118,15 @@
           </el-select>
         </el-form-item>
         <el-form-item label="文章分类">
-            <el-select v-model="articleForm.category" disabled style="width: 180px;">
-              <el-option label="公司分类" :value="3" />
-            </el-select>
-        </el-form-item>
+  <el-select v-model="articleForm.category" disabled style="width: 180px;">
+    <el-option
+      v-for="item in categoryOptions"
+      :key="item.value"
+      :label="item.label"
+      :value="item.value"
+    />
+  </el-select>
+</el-form-item>
         <el-form-item label="封面图片">
           <div class="toolbar-row" style="align-items: center;">
             <el-button :loading="coverUploading" @click="coverInputRef?.click()">上传封面</el-button>
@@ -294,7 +299,6 @@ async function openEditDialog(row) {
   const res = await getAdminArticleDetail(row.id);
   resetArticleForm();
   Object.assign(articleForm, res.data || {});
-  articleForm.category = 3;
   dialogVisible.value = true;
 }
 
@@ -320,7 +324,7 @@ async function uploadImage(event, targetKeyPrefix, loadingRef) {
     };
     const currentMap = fieldMap[targetKeyPrefix];
     const fileId = res.data?.id || null;
-    const fileUrl = res.data?.accessUrl || res.data?.fileUrl || "";
+    const fileUrl = res.data?.fileUrl || "";
 
     if (!currentMap) {
       return;
@@ -376,7 +380,7 @@ async function submitArticle() {
     previewImageId: articleForm.previewImageId || undefined,
     previewImageUrl: articleForm.previewImageUrl || undefined,
     status: articleForm.status,
-    category: 3,
+    category: articleForm.category, 
   };
 
   submitting.value = true;

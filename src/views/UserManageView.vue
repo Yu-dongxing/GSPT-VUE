@@ -361,7 +361,7 @@ async function handleLicenseUpload(event) {
   try {
     const res = await uploadFile(file);
     createForm.licenseFileId = res.data?.id || null;
-    createForm.licenseUrl = res.data?.accessUrl || res.data?.fileUrl || "";
+    createForm.licenseUrl = res.data?.fileUrl || "";
   } finally {
     licenseUploading.value = false;
   }

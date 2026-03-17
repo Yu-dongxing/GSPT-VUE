@@ -31,7 +31,7 @@
 import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { loginAdmin } from "../api/user";
-import { TOKEN_KEY } from "../utils/request";
+import { setAuthSession, setStoredCurrentUser } from "../utils/request";
 
 const router = useRouter();
 const loading = ref(false);
@@ -48,9 +48,16 @@ async function handleSubmit() {
   loading.value = true;
   try {
     const res = await loginAdmin(form);
+    const tokenName = res.data?.tokenName;
     const token = res.data?.tokenValue;
     if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
+      setAuthSession(tokenName, token);
+      setStoredCurrentUser({
+        userId: res.data?.userId,
+        username: res.data?.username,
+        role: res.data?.role,
+        auditStatus: res.data?.auditStatus,
+      });
       router.replace("/users");
     }
   } finally {

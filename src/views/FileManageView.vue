@@ -10,13 +10,13 @@
             <el-input v-model="filters.originalName" clearable placeholder="请输入原始文件名" />
           </el-form-item>
           <el-form-item label="存储名称">
-            <el-input v-model="filters.storageName" clearable placeholder="请输入存储名称" />
+            <el-input v-model="filters.storageName" clearable placeholder="请输入存储文件名" />
           </el-form-item>
           <el-form-item label="文件后缀">
-            <el-input v-model="filters.fileSuffix" clearable placeholder="如 png/mp4" />
+            <el-input v-model="filters.fileSuffix" clearable placeholder="例如 png、mp4" />
           </el-form-item>
           <el-form-item label="上传者">
-            <el-input v-model="filters.uploaderName" clearable placeholder="请输入上传者" />
+            <el-input v-model="filters.uploaderName" clearable placeholder="请输入上传者用户名" />
           </el-form-item>
           <el-form-item label="上传时间">
             <el-date-picker
@@ -32,21 +32,48 @@
             <div class="toolbar-row">
               <el-button type="primary" :loading="loading" @click="handleSearch">查询</el-button>
               <el-button @click="handleReset">重置</el-button>
+              <el-button
+                type="danger"
+                :disabled="!selectedIds.length"
+                :loading="batchDeleting"
+                @click="handleBatchDelete"
+              >
+                批量删除
+              </el-button>
             </div>
           </el-form-item>
         </el-form>
 
-        <el-table :data="tableData" v-loading="loading" style="width: 100%;">
+        <div class="section-subtitle" style="margin-bottom: 12px;">
+          已选择 {{ selectedIds.length }} 条文件记录
+        </div>
+
+        <el-table
+          ref="tableRef"
+          :data="tableData"
+          v-loading="loading"
+          style="width: 100%;"
+          @selection-change="handleSelectionChange"
+        >
+          <el-table-column type="selection" width="52" reserve-selection />
           <el-table-column prop="id" label="ID" width="90" />
           <el-table-column prop="originalName" label="原始名称" min-width="180" />
           <el-table-column prop="storageName" label="存储名称" min-width="220" />
           <el-table-column prop="fileSuffix" label="后缀" width="100" />
-          <el-table-column prop="fileSize" label="大小" width="120" />
-          <el-table-column prop="uploaderName" label="上传者" min-width="140" />
-          <el-table-column label="访问地址" min-width="240">
+          <el-table-column label="大小" width="120">
             <template #default="{ row }">
-              <a class="mono-text ellipsis-text" :href="resolveAssetUrl(row.accessUrl)" target="_blank">
-                {{ resolveAssetUrl(row.accessUrl) }}
+              {{ formatToMB(row.fileSize) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="uploaderName" label="上传者/访客IP" min-width="140" />
+          <el-table-column label="访问地址" min-width="260">
+            <template #default="{ row }">
+              <a
+                class="mono-text ellipsis-text"
+                :href="resolveAssetUrl(row.fileUrl || row.accessUrl)"
+                target="_blank"
+              >
+                {{ resolveAssetUrl(row.fileUrl || row.accessUrl) }}
               </a>
             </template>
           </el-table-column>
@@ -76,14 +103,18 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from "vue";
+import { nextTick, onMounted, reactive, ref } from "vue";
 import { ElMessageBox } from "element-plus";
-import { deleteAdminFile, getAdminFilePage } from "../api/file";
+import { batchDeleteAdminFiles, deleteAdminFile, getAdminFilePage } from "../api/file";
 import { resolveAssetUrl } from "../utils/request";
 
 const loading = ref(false);
+const batchDeleting = ref(false);
+const tableRef = ref(null);
 const tableData = ref([]);
 const createRange = ref([]);
+const selectedRows = ref([]);
+const selectedIds = ref([]);
 
 const filters = reactive({
   originalName: "",
@@ -111,6 +142,14 @@ function buildParams() {
   };
 }
 
+function resetSelection() {
+  selectedRows.value = [];
+  selectedIds.value = [];
+  nextTick(() => {
+    tableRef.value?.clearSelection();
+  });
+}
+
 async function fetchFiles() {
   loading.value = true;
   try {
@@ -118,14 +157,28 @@ async function fetchFiles() {
     const page = res.data || {};
     tableData.value = page.records || [];
     pagination.total = page.total || 0;
+    resetSelection();
   } finally {
     loading.value = false;
   }
 }
 
+function handleSelectionChange(rows) {
+  selectedRows.value = rows;
+  selectedIds.value = rows.map((item) => item.id).filter(Boolean);
+}
+
 function handleSearch() {
   pagination.pageNum = 1;
   fetchFiles();
+}
+
+function formatToMB(bytes) {
+  if (bytes === null || bytes === undefined || isNaN(bytes)) {
+    return "0.00 MB";
+  }
+  // 1 MB = 1024 * 1024 Bytes
+  return (bytes / (1024 * 1024)).toFixed(2) + " MB";
 }
 
 function handleReset() {
@@ -151,16 +204,50 @@ function handleSizeChange(size) {
 
 async function handleDelete(row) {
   try {
-    await ElMessageBox.confirm(`确认删除文件“${row.originalName}”吗？`, "删除确认", {
-      type: "warning",
-    });
+    await ElMessageBox.confirm(
+      `确认删除文件“${row.originalName || row.storageName || row.id}”吗？`,
+      "删除确认",
+      {
+        type: "warning",
+      }
+    );
     await deleteAdminFile(row.id);
     if (tableData.value.length === 1 && pagination.pageNum > 1) {
       pagination.pageNum -= 1;
     }
-    fetchFiles();
+    await fetchFiles();
   } catch {
     // 用户取消删除
+  }
+}
+
+async function handleBatchDelete() {
+  if (!selectedIds.value.length) {
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确认批量删除已选中的 ${selectedIds.value.length} 条文件记录吗？`,
+      "批量删除确认",
+      {
+        type: "warning",
+      }
+    );
+
+    batchDeleting.value = true;
+    await batchDeleteAdminFiles(selectedIds.value);
+
+    const remainCount = tableData.value.length - selectedIds.value.length;
+    if (remainCount <= 0 && pagination.pageNum > 1) {
+      pagination.pageNum -= 1;
+    }
+
+    await fetchFiles();
+  } catch {
+    // 用户取消删除
+  } finally {
+    batchDeleting.value = false;
   }
 }
 

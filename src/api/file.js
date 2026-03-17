@@ -8,9 +8,6 @@ export function uploadFile(file) {
     url: "/file/upload",
     method: "post",
     data: formData,
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
   });
 }
 
@@ -27,7 +24,7 @@ export function batchDeleteMyFiles(fileIds) {
   return request({
     url: "/file/my/delete/batch",
     method: "get",
-    data: {
+    params: {
       fileIds,
     },
   });
@@ -44,8 +41,8 @@ export function deleteAdminFile(fileId) {
 
 export function batchDeleteAdminFiles(fileIds) {
   return request({
-    url: "/admin/file/delete//batch",
-    method: "get",
+    url: "/admin/file/delete/batch",
+    method: "post",
     data: {
       fileIds,
     },

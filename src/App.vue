@@ -86,7 +86,13 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ArrowDown, Document, Folder, Moon, Operation, Sunny, User } from "@element-plus/icons-vue";
 import { getCurrentUser, logout } from "./api/user";
-import { getStoredTheme, setStoredTheme, TOKEN_KEY } from "./utils/request";
+import {
+  clearAuthSession,
+  getStoredCurrentUser,
+  getStoredTheme,
+  setStoredCurrentUser,
+  setStoredTheme,
+} from "./utils/request";
 
 const route = useRoute();
 const router = useRouter();
@@ -130,8 +136,9 @@ async function refreshCurrentUser() {
   try {
     const res = await getCurrentUser();
     currentUser.value = res.data || null;
+    setStoredCurrentUser(currentUser.value);
   } catch {
-    currentUser.value = null;
+    currentUser.value = getStoredCurrentUser();
   }
 }
 
@@ -141,7 +148,7 @@ async function handleLogout() {
   } catch {
     // 请求层统一处理
   } finally {
-    localStorage.removeItem(TOKEN_KEY);
+    clearAuthSession();
     currentUser.value = null;
     router.replace("/login");
   }
@@ -151,15 +158,13 @@ watch(
   () => route.path,
   () => {
     mobileMenuOpen.value = false;
-    if (!isLoginPage.value) {
-      refreshCurrentUser();
-    }
   },
   { immediate: true }
 );
 
 onMounted(() => {
   applyTheme(getStoredTheme());
+  currentUser.value = getStoredCurrentUser();
 });
 </script>
 

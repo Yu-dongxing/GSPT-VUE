@@ -122,7 +122,7 @@ function insertLink() {
 
 async function doUpload(file, type) {
   const res = await uploadFile(file);
-  const assetUrl = resolveAssetUrl(res.data?.accessUrl || res.data?.fileUrl);
+  const assetUrl = res.data?.accessUrl || resolveAssetUrl(res.data?.fileUrl);
 
   if (type === "image") {
     insertHtml(`<img src="${assetUrl}" alt="${file.name}" style="max-width:100%;border-radius:12px;" />`);
