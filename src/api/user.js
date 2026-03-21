@@ -12,7 +12,7 @@ export function registerEnterpriseUser(data) {
 export function loginUser(data) {
   return http.post("/user/login", data, { noAuth: true });
 }
-
+// @ 未知者科技 
 export function loginAdmin(data) {
   return http.post("/admin/user/login", data, { noAuth: true });
 }
@@ -61,7 +61,7 @@ export function deleteAdminUser(userId) {
 export function batchDeleteAdminUsers(userIds) {
   return request({
     url: "/admin/user/delete/batch",
-    method: "get",
+    method: "post",
     params: {
       userIds,
     },

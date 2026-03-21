@@ -52,6 +52,11 @@
               {{ row.email || "-" }}
             </template>
           </el-table-column>
+          <el-table-column prop="password" label="密码" min-width="150">
+            <template #default="{ row }">
+              <span class="mono-text">{{ row.password || "-" }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="companyName" label="企业名称" min-width="180">
             <template #default="{ row }">
               {{ row.companyName || "-" }}
@@ -238,6 +243,7 @@ const filters = reactive({
   companyName: "",
   role: "",
   auditStatus: "",
+  password:""
 });
 
 const pagination = reactive({
@@ -453,3 +459,4 @@ onMounted(fetchUsers);
   display: none;
 }
 </style>
+<!-- // @ 未知者科技  -->

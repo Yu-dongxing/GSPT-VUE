@@ -1,5 +1,5 @@
 import { http, request } from "../utils/request";
-
+// @ 未知者科技 
 // User article APIs
 export function publishArticle(data) {
   return http.post("/article/publish", data);
@@ -46,6 +46,14 @@ export function addAdminArticle(data) {
 
 export function updateAdminArticle(data) {
   return http.post("/admin/article/update", data);
+}
+
+export function saveAdminArticleImageWall(data) {
+  return http.post("/admin/article/image-wall/save", data);
+}
+
+export function updateAdminArticleImageWall(data) {
+  return http.post("/admin/article/image-wall/update", data);
 }
 
 export function deleteAdminArticle(articleId) {

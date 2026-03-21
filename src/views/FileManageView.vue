@@ -70,10 +70,10 @@
             <template #default="{ row }">
               <a
                 class="mono-text ellipsis-text"
-                :href="resolveAssetUrl(row.fileUrl || row.accessUrl)"
+                :href="resolveAssetUrl(row.fileUrl)"
                 target="_blank"
               >
-                {{ resolveAssetUrl(row.fileUrl || row.accessUrl) }}
+                {{ resolveAssetUrl(row.fileUrl) }}
               </a>
             </template>
           </el-table-column>
@@ -253,3 +253,4 @@ async function handleBatchDelete() {
 
 onMounted(fetchFiles);
 </script>
+<!-- // @ 未知者科技  -->

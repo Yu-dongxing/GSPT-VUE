@@ -1,3 +1,4 @@
+<!-- // @ 未知者科技  -->
 <template>
   <div class="editor-shell">
     <div class="editor-toolbar">
@@ -122,7 +123,7 @@ function insertLink() {
 
 async function doUpload(file, type) {
   const res = await uploadFile(file);
-  const assetUrl = res.data?.accessUrl || resolveAssetUrl(res.data?.fileUrl);
+  const assetUrl = resolveAssetUrl(res.data?.fileUrl);
 
   if (type === "image") {
     insertHtml(`<img src="${assetUrl}" alt="${file.name}" style="max-width:100%;border-radius:12px;" />`);

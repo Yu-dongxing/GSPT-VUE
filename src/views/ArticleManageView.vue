@@ -145,6 +145,38 @@
             <span v-else class="section-subtitle">可选，用于列表或分享预览</span>
           </div>
         </el-form-item>
+        <el-form-item label="照片墙">
+          <div class="image-wall-section">
+            <div class="toolbar-row image-wall-toolbar">
+              <el-button :loading="imageWallUploading" @click="imageWallInputRef?.click()">上传照片墙图片</el-button>
+              <span class="section-subtitle">支持多次上传，保存时会按当前顺序生成排序</span>
+            </div>
+            <div v-if="articleForm.imageWall.length" class="image-wall-grid">
+              <div
+                v-for="(item, index) in articleForm.imageWall"
+                :key="`${item.fileId || 'new'}-${index}`"
+                class="image-wall-card"
+              >
+                <img :src="resolveAssetUrl(item.imageUrl)" class="image-wall-card__image" />
+                <div class="image-wall-card__meta">
+                  <span class="image-wall-card__index">第 {{ index + 1 }} 张</span>
+                  <!-- <el-input-number
+                    v-model="item.sortOrder"
+                    :min="1"
+                    :step="1"
+                    size="small"
+                    controls-position="right"
+                    @change="normalizeImageWallSort"
+                  /> -->
+                </div>
+                <div class="image-wall-card__actions">
+                  <el-button type="danger" link @click="removeImageWallItem(index)">删除</el-button>
+                </div>
+              </div>
+            </div>
+            <span v-else class="section-subtitle">暂未上传照片墙图片</span>
+          </div>
+        </el-form-item>
         <el-form-item label="正文内容" required>
           <WangEditor v-model="articleForm.content" :height="360" placeholder="请输入文章正文，支持上传图片和视频" />
         </el-form-item>
@@ -157,6 +189,14 @@
         class="hidden-input"
         accept="image/*"
         @change="handlePreviewUpload"
+      />
+      <input
+        ref="imageWallInputRef"
+        type="file"
+        class="hidden-input"
+        accept="image/*"
+        multiple
+        @change="handleImageWallUpload"
       />
 
       <template #footer>
@@ -176,7 +216,9 @@ import {
   deleteAdminArticle,
   getAdminArticleDetail,
   getAdminArticlePage,
+  saveAdminArticleImageWall,
   updateAdminArticle,
+  updateAdminArticleImageWall,
 } from "../api/article";
 import { uploadFile } from "../api/file";
 import { resolveAssetUrl } from "../utils/request";
@@ -200,10 +242,12 @@ const dialogVisible = ref(false);
 const submitting = ref(false);
 const coverUploading = ref(false);
 const previewUploading = ref(false);
+const imageWallUploading = ref(false);
 const tableData = ref([]);
 const createRange = ref([]);
 const coverInputRef = ref(null);
 const previewInputRef = ref(null);
+const imageWallInputRef = ref(null);
 
 const filters = reactive({
   title: "",
@@ -231,7 +275,8 @@ function createArticleForm() {
     previewImageUrl: "",
     status: 0,
     category: 3,
-    previewContent:""
+    previewContent: "",
+    imageWall: [],
   };
 }
 
@@ -298,7 +343,8 @@ function openCreateDialog() {
 async function openEditDialog(row) {
   const res = await getAdminArticleDetail(row.id);
   resetArticleForm();
-  Object.assign(articleForm, res.data || {});
+  Object.assign(articleForm, createArticleForm(), res.data || {});
+  articleForm.imageWall = normalizeImageWallList(res.data?.imageWall || []);
   dialogVisible.value = true;
 }
 
@@ -345,8 +391,82 @@ function handlePreviewUpload(event) {
   return uploadImage(event, "preview", previewUploading);
 }
 
+function normalizeImageWallList(list = []) {
+  return [...list]
+    .filter((item) => item?.fileId && item?.imageUrl)
+    .sort((a, b) => Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0))
+    .map((item, index) => ({
+      fileId: item.fileId,
+      imageUrl: item.imageUrl,
+      sortOrder: Number(item.sortOrder) > 0 ? Number(item.sortOrder) : index + 1,
+    }));
+}
+
+function normalizeImageWallSort() {
+  articleForm.imageWall = [...articleForm.imageWall]
+    .sort((a, b) => Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0))
+    .map((item, index) => ({
+      ...item,
+      sortOrder: index + 1,
+    }));
+}
+
+async function handleImageWallUpload(event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = "";
+  if (!files.length) {
+    return;
+  }
+
+  imageWallUploading.value = true;
+  try {
+    const uploadedItems = [];
+    for (const file of files) {
+      const res = await uploadFile(file);
+      const fileId = res.data?.id || null;
+      const imageUrl = res.data?.fileUrl || "";
+      if (!fileId || !imageUrl) {
+        continue;
+      }
+      uploadedItems.push({
+        fileId,
+        imageUrl,
+        sortOrder: articleForm.imageWall.length + uploadedItems.length + 1,
+      });
+    }
+
+    articleForm.imageWall = normalizeImageWallList([...articleForm.imageWall, ...uploadedItems]);
+  } finally {
+    imageWallUploading.value = false;
+  }
+}
+
+function removeImageWallItem(index) {
+  articleForm.imageWall.splice(index, 1);
+  normalizeImageWallSort();
+}
+
 function hasMeaningfulContent(html) {
   return html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim().length > 0 || /<(img|video)\b/i.test(html);
+}
+
+function validateImagePair(fileId, imageUrl, message) {
+  if ((fileId && !imageUrl) || (!fileId && imageUrl)) {
+    ElMessage.error(message);
+    return false;
+  }
+
+  return true;
+}
+
+function buildImageWallPayload() {
+  const images = normalizeImageWallList(articleForm.imageWall);
+  articleForm.imageWall = images;
+  return images.map((item, index) => ({
+    fileId: item.fileId,
+    imageUrl: item.imageUrl,
+    sortOrder: index + 1,
+  }));
 }
 
 async function submitArticle() {
@@ -354,19 +474,18 @@ async function submitArticle() {
     return;
   }
 
-  if (
-    (articleForm.coverFileId && !articleForm.coverImageUrl) ||
-    (!articleForm.coverFileId && articleForm.coverImageUrl)
-  ) {
-    ElMessage.error("封面图片ID和访问地址必须同时提供");
+  if (!validateImagePair(articleForm.coverFileId, articleForm.coverImageUrl, "封面图片ID和访问地址必须同时提供")) {
     return;
   }
 
-  if (
-    (articleForm.previewImageId && !articleForm.previewImageUrl) ||
-    (!articleForm.previewImageId && articleForm.previewImageUrl)
-  ) {
-    ElMessage.error("预览图文件ID和访问路径必须同时提供");
+  if (!validateImagePair(articleForm.previewImageId, articleForm.previewImageUrl, "预览图文件ID和访问路径必须同时提供")) {
+    return;
+  }
+
+  const imageWall = buildImageWallPayload();
+  const invalidImageWallItem = imageWall.find((item) => !item.fileId || !item.imageUrl);
+  if (invalidImageWallItem) {
+    ElMessage.error("照片墙图片的文件ID和访问路径必须同时提供");
     return;
   }
 
@@ -374,21 +493,34 @@ async function submitArticle() {
     id: articleForm.id || undefined,
     title: articleForm.title.trim(),
     content: articleForm.content,
-    previewContent:articleForm.previewContent || '',
+    previewContent: articleForm.previewContent || "",
     coverFileId: articleForm.coverFileId || undefined,
     coverImageUrl: articleForm.coverImageUrl || undefined,
     previewImageId: articleForm.previewImageId || undefined,
     previewImageUrl: articleForm.previewImageUrl || undefined,
     status: articleForm.status,
-    category: articleForm.category, 
+    category: articleForm.category,
   };
 
   submitting.value = true;
   try {
+    let articleId = articleForm.id;
     if (articleForm.id) {
-      await updateAdminArticle(payload);
+      const res = await updateAdminArticle(payload);
+      articleId = res.data?.id || articleId;
+      await updateAdminArticleImageWall({
+        articleId,
+        images: imageWall,
+      });
     } else {
-      await addAdminArticle(payload);
+      const res = await addAdminArticle(payload);
+      articleId = res.data?.id;
+      if (articleId) {
+        await saveAdminArticleImageWall({
+          articleId,
+          images: imageWall,
+        });
+      }
     }
     dialogVisible.value = false;
     fetchArticles();
@@ -419,4 +551,54 @@ onMounted(fetchArticles);
 .hidden-input {
   display: none;
 }
+
+.image-wall-section {
+  width: 100%;
+}
+
+.image-wall-toolbar {
+  margin-bottom: 12px;
+}
+
+.image-wall-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.image-wall-card {
+  border: 1px solid var(--el-border-color);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--el-bg-color);
+}
+
+.image-wall-card__image {
+  width: 100%;
+  height: 112px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.image-wall-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.image-wall-card__index {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.image-wall-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
 </style>
+<!-- // @ 未知者科技  -->

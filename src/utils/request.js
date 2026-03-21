@@ -1,7 +1,7 @@
 import axios from "axios";
 import { ElMessage } from "element-plus";
 import router from "../router";
-
+// // @ 未知者科技 
 const DEFAULT_TIMEOUT = 15000;
 const SUCCESS_CODE = 200;
 const DEFAULT_SUCCESS_MESSAGE = "操作成功";
@@ -15,8 +15,8 @@ export const CURRENT_USER_STORAGE_KEY = "__gspt_current_user__";
 const THEME_KEY = "gspt-theme";
 const RESULT_CODE_ENUM_NAME = "ResultCode";
 
-const baseURL =
-  import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8084/api";
+// const baseURL ="http://127.0.0.1:8084/api";
+const baseURL ="https://api.cnfctry.cn/api";
 
 const service = axios.create({
   baseURL,
